@@ -5,139 +5,23 @@ from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray
 import serial
 import re
-import time
-import numpy as np
 import glob
-from dataclasses import dataclass
-from typing import Optional, List
-
-@dataclass
-class KalmanParams:
-    """1D Kalman Filter Parameters for distance filtering"""
-    process_noise_std: float = 2.0
-    measurement_noise_std: float = 10.0
-    initial_distance_std: float = 15.0
-    max_velocity: float = 40.0
-
-class Distance1DKalman:
-    """Simple 1D Kalman Filter for distance measurements"""
-
-    def __init__(self, params: KalmanParams):
-        self.params = params
-
-        # State: [distance, velocity]
-        self.x = np.array([0.0, 0.0])
-
-        # State covariance matrix
-        self.P = np.array([
-            [params.initial_distance_std**2, 0],
-            [0, (params.max_velocity/2)**2]
-        ])
-
-        # Measurement noise variance
-        self.R = params.measurement_noise_std**2
-
-        # Measurement matrix (we observe distance only)
-        self.H = np.array([1.0, 0.0])
-
-        self.last_time = None
-        self.initialized = False
-
-    def predict(self, dt: float):
-        """Prediction step"""
-        # State transition matrix
-        F = np.array([
-            [1.0, dt],
-            [0.0, 1.0]
-        ])
-
-        # Process noise matrix
-        q = self.params.process_noise_std**2
-        Q = np.array([
-            [q * dt**4 / 4, q * dt**3 / 2],
-            [q * dt**3 / 2, q * dt**2]
-        ])
-
-        # Predict state and covariance
-        self.x = F @ self.x
-        self.P = F @ self.P @ F.T + Q
-
-        # Apply constraints
-        self.x[0] = max(0, self.x[0])
-        self.x[1] = np.clip(self.x[1], -self.params.max_velocity, self.params.max_velocity)
-
-    def update(self, measurement: float):
-        """Update step"""
-        # Innovation (residual)
-        y = measurement - self.H @ self.x
-
-        # Innovation covariance
-        S = self.H @ self.P @ self.H.T + self.R
-
-        # Kalman gain
-        K = self.P @ self.H.T / S
-
-        # Update state and covariance
-        self.x = self.x + K * y
-        self.P = self.P - np.outer(K, K) * S
-
-    def process_measurement(self, measurement: float, timestamp: float) -> Optional[float]:
-        """Process a new measurement"""
-        if not self.initialized:
-            # Initialize with first measurement
-            self.x[0] = measurement
-            self.x[1] = 0.0
-            self.initialized = True
-            self.last_time = timestamp
-            return measurement * 0.97  # Apply 3% correction
-
-        # Calculate time delta
-        dt = timestamp - self.last_time if self.last_time else 0.2
-        dt = max(0.01, min(dt, 1.0))
-
-        # Kalman filter steps
-        self.predict(dt)
-        self.update(measurement)
-
-        self.last_time = timestamp
-
-        return self.x[0] * 0.97  # Return filtered distance with 3% correction
+from typing import List, Optional
 
 class UWBNode(Node):
     def __init__(self):
         super().__init__('uwb_distance_node')
 
-        # Create publisher for filtered distances (Kalman filtered)
-        self.kalman_publisher_ = self.create_publisher(Float32MultiArray, '/uwb_raw_data', 10)
-
         # Create publisher for raw unfiltered distances
-        self.raw_publisher_ = self.create_publisher(Float32MultiArray, '/raw_uwb_very_raw', 10)
-
-        # Kalman filter parameters (fixed constants)
-        self.kalman_params = KalmanParams(
-            process_noise_std=2.0,
-            measurement_noise_std=10.0,
-            max_velocity=40.0
-        )
-
-        # Initialize Kalman filters for each distance
-        self.kalman_filters = [
-            Distance1DKalman(self.kalman_params),  # d1
-            Distance1DKalman(self.kalman_params),  # d2
-            Distance1DKalman(self.kalman_params),  # d3
-            Distance1DKalman(self.kalman_params)   # d4
-        ]
+        self.raw_publisher_ = self.create_publisher(Float32MultiArray, '/raw_uwb_data', 10)
 
         # Serial connection
         self.ser = None
 
-        # Current filtered distances
-        self.filtered_distances = [0.0, 0.0, 0.0, 0.0]
-
         # Current raw distances
         self.raw_distances = [0.0, 0.0, 0.0, 0.0]
 
-        # Regex patterns for 4 anchors with new JSON format
+        # Regex patterns for 4 anchors with JSON format
         self.distance_patterns = [
             re.compile(r'"Addr":"0x0001"[^}]*"D_cm"\s*:\s*(\d+)'),  # d1
             re.compile(r'"Addr":"0x0002"[^}]*"D_cm"\s*:\s*(\d+)'),  # d2
@@ -275,7 +159,6 @@ class UWBNode(Node):
                     if messages:
                         message = messages[-1]
                         raw_distances = self.parse_distances(message)
-                        current_time = time.time()
 
                         # Update raw distances and publish them
                         raw_updated = False
@@ -287,21 +170,6 @@ class UWBNode(Node):
                         if raw_updated:
                             self.publish_raw_distances()
 
-                        # Apply Kalman filter to each distance
-                        kalman_updated = False
-                        for i, raw_dist in enumerate(raw_distances):
-                            if raw_dist is not None:
-                                filtered_dist = self.kalman_filters[i].process_measurement(
-                                    raw_dist, current_time
-                                )
-                                if filtered_dist is not None:
-                                    self.filtered_distances[i] = filtered_dist
-                                    kalman_updated = True
-
-                        # Publish filtered distances if any were updated
-                        if kalman_updated:
-                            self.publish_kalman_distances()
-
         except Exception as e:
             self.get_logger().error(f"Error reading serial data: {e}")
 
@@ -309,30 +177,14 @@ class UWBNode(Node):
         """Publish raw unfiltered distances to ROS topic"""
         msg = Float32MultiArray()
         msg.data = [float(d) for d in self.raw_distances]
-
         self.raw_publisher_.publish(msg)
 
         # Log the published raw data
         self.get_logger().info(
-            f"Published RAW distances: d1={self.raw_distances[0]:.1f}, "
+            f"Published distances: d1={self.raw_distances[0]:.1f}, "
             f"d2={self.raw_distances[1]:.1f}, "
             f"d3={self.raw_distances[2]:.1f}, "
             f"d4={self.raw_distances[3]:.1f}"
-        )
-
-    def publish_kalman_distances(self):
-        """Publish Kalman filtered distances to ROS topic"""
-        msg = Float32MultiArray()
-        msg.data = [float(d) for d in self.filtered_distances]
-
-        self.kalman_publisher_.publish(msg)
-
-        # Log the published filtered data
-        self.get_logger().info(
-            f"Published KALMAN distances: d1={self.filtered_distances[0]:.1f}, "
-            f"d2={self.filtered_distances[1]:.1f}, "
-            f"d3={self.filtered_distances[2]:.1f}, "
-            f"d4={self.filtered_distances[3]:.1f}"
         )
 
     def destroy_node(self):
