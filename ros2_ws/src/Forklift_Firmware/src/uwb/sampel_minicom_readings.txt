@@ -1,0 +1,57 @@
+[00:00:37.198,791] <wrn> main: Something is wrong with Receiving Msg
+[00:00:37.250,488] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.251,464] <inf> SIT_DISTANCE: Send Success
+[00:00:37.252,197] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.252,532] <inf> main: ID: 1, Distance: 0.642579
+[00:00:37.304,168] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.305,145] <inf> SIT_DISTANCE: Send Success
+[00:00:37.305,877] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.306,213] <inf> main: ID: 2, Distance: 0.834884
+[00:00:37.358,917] <inf> SIT_DISTANCE: Test: 038200f7 & 00004000
+[00:00:37.359,008] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() no 'RX Frame Checksum Good'
+[00:00:37.359,069] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() reg1 = 0x038200f7 ; reg2 = 0x038000f7 ; removed =  0x00020000
+[00:00:37.359,130] <err> SIT_DISTANCE: SIT Failed Receive Simple MSG (10, header) fail
+[00:00:37.359,161] <wrn> main: Something is wrong with Receiving Msg
+[00:00:37.411,926] <inf> SIT_DISTANCE: Test: 038200f7 & 00004000
+[00:00:37.411,987] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() no 'RX Frame Checksum Good'
+[00:00:37.412,048] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() reg1 = 0x038200f7 ; reg2 = 0x038000f7 ; removed =  0x00020000
+[00:00:37.412,139] <err> SIT_DISTANCE: SIT Failed Receive Simple MSG (14, header) fail
+[00:00:37.412,139] <wrn> main: Something is wrong with Receiving Msg
+[00:00:37.463,836] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.464,813] <inf> SIT_DISTANCE: Send Success
+[00:00:37.465,545] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.465,881] <inf> main: ID: 1, Distance: 0.605056
+[00:00:37.517,517] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.518,493] <inf> SIT_DISTANCE: Send Success
+[00:00:37.519,226] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.519,561] <inf> main: ID: 2, Distance: 0.966214
+[00:00:37.572,265] <inf> SIT_DISTANCE: Test: 038200f7 & 00004000
+[00:00:37.572,357] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() no 'RX Frame Checksum Good'
+[00:00:37.572,418] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() reg1 = 0x038200f7 ; reg2 = 0x038000f7 ; removed =  0x00020000
+[00:00:37.572,479] <err> SIT_DISTANCE: SIT Failed Receive Simple MSG (10, header) fail
+[00:00:37.572,509] <wrn> main: Something is wrong with Receiving Msg
+[00:00:37.625,274] <inf> SIT_DISTANCE: Test: 038200f7 & 00004000
+[00:00:37.625,335] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() no 'RX Frame Checksum Good'
+[00:00:37.625,396] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() reg1 = 0x038200f7 ; reg2 = 0x038000f7 ; removed =  0x00020000
+[00:00:37.625,488] <err> SIT_DISTANCE: SIT Failed Receive Simple MSG (14, header) fail
+[00:00:37.625,488] <wrn> main: Something is wrong with Receiving Msg
+[00:00:37.677,185] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.678,161] <inf> SIT_DISTANCE: Send Success
+[00:00:37.678,863] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.679,229] <inf> main: ID: 1, Distance: 0.647269
+[00:00:37.730,865] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.731,842] <inf> SIT_DISTANCE: Send Success
+[00:00:37.732,543] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+[00:00:37.732,879] <inf> main: ID: 2, Distance: 0.769219
+[00:00:37.785,614] <inf> SIT_DISTANCE: Test: 038200f7 & 00004000
+[00:00:37.785,705] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() no 'RX Frame Checksum Good'
+[00:00:37.785,766] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() reg1 = 0x038200f7 ; reg2 = 0x038000f7 ; removed =  0x00020000
+[00:00:37.785,827] <err> SIT_DISTANCE: SIT Failed Receive Simple MSG (10, header) fail
+[00:00:37.785,827] <wrn> main: Something is wrong with Receiving Msg
+[00:00:37.838,623] <inf> SIT_DISTANCE: Test: 038200f7 & 00004000
+[00:00:37.838,684] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() no 'RX Frame Checksum Good'
+[00:00:37.838,745] <wrn> SIT_DISTANCE: sit_checkReceivedMessage() reg1 = 0x038200f7 ; reg2 = 0x038000f7 ; removed =  0x00020000
+[00:00:37.838,836] <err> SIT_DISTANCE: SIT Failed Receive Simple MSG (14, header) fil
+[00:00:37.838,836] <wrn> main: Something is wrong with Receiving Msg
+[00:00:37.890,533] <inf> SIT_DISTANCE: Test: 03806ff7 & 00004000
+

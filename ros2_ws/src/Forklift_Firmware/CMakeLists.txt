@@ -41,6 +41,13 @@ install(PROGRAMS
   # src/uwb_xy.py
   src/motor_controller.py
   src/raw_uwb_publish.py
+  src/tests/single_uwb_publish.py
+  src/tests/ui_display.py
+  # src/tests/uwb_xy.py
+  src/tests/uwb_xy_ui.py
+  src/tests/uwb_xy.py
+  src/uwb/uwb_data_parser.py
+  src/uwb/uwb_trilateration.py
   # src/uwb_to_odom.py
   # src/uwb_fusion/uwb_imu_fusion.py
   # src/uwb_fusion/uwb_raw_publisher.py
