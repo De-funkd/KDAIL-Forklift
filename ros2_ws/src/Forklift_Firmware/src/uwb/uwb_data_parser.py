@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+# This script reads UWB (Ultra-Wideband) data from a serial port,
+# parses it to extract distances to multiple anchors, handles timeouts
+# if an anchor's data is not received, and publishes the distances
+# and status information to ROS2 topics.
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, String
