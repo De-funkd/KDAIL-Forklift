@@ -47,6 +47,7 @@ install(PROGRAMS
   src/tests/uwb_xy_ui.py
   src/tests/uwb_xy.py
   src/uwb/uwb_data_parser.py
+  src/uwb/uwb_trilateration_test.py
   src/uwb/uwb_trilateration.py
   # src/uwb_to_odom.py
   # src/uwb_fusion/uwb_imu_fusion.py
@@ -61,7 +62,6 @@ install(PROGRAMS
 )
 
 install(DIRECTORY
-  urdf
   rviz
   launch
   DESTINATION share/${PROJECT_NAME}
