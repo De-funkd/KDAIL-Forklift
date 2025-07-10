@@ -39,7 +39,6 @@ The robot is instructed via an intuitive web-based interface backed by a ROS-pow
 
 #  Demonstration and Media
 
-- [Automation and detection demo](https://youtube.com/shorts/qDDlVrJwSQA?feature=share)
 - [UWB RTLS demo](https://youtube.com/shorts/iG-MlcV99eU?feature=share)
 
 ---
