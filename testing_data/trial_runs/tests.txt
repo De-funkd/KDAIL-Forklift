@@ -1,0 +1,1 @@
+4 anchors setup and readings for trilateration , distances from each anchor and status (jazzy)
