@@ -1,3 +1,5 @@
+128PL , 8PAC , Channel 9 , SVHOY FIRMWARE
+
 test 1 - Max readings ascending   
 test 2 - Max readings descending
 test 3 - Anchor on 3rd floor and tag in the fields 

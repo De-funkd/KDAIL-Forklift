@@ -1,1 +1,3 @@
+128PL , 8PAC , Channel 9 
+
 4 anchors setup and readings for trilateration , distances from each anchor and status (jazzy)
