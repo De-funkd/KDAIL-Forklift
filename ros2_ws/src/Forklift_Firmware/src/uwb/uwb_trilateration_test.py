@@ -43,9 +43,9 @@ class UWBPositionCalculator(Node):
         # Anchor positions (d1, d2, d3, d4) in centimeters
         self.anchor_positions = {
             0: np.array([0.0, 0.0]),         # d1 at (0,0)
-            1: np.array([0.0,1488.8]),     # d2 at (10000,0)
-            2: np.array([435.8, 1500.0]),  # d3 at (10000,6000)
-            3: np.array([0.0, 445.0])       # d4 at (0,6000)
+            1: np.array([0.0,107.0]),     # d2 at (10000,0)
+            2: np.array([220.0, 119.0]),  # d3 at (10000,6000)
+            3: np.array([220.0, 12.0])       # d4 at (0,6000)
         }
 
         # Define specific anchor pairs for calculation (only adjacent pairs)

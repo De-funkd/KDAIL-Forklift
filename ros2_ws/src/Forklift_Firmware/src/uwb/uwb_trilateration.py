@@ -12,10 +12,10 @@ import math
 
 # Anchor coordinates [x, y, z] in meters
 ANCHORS = [
-    [0.0, 0.0, 1.0],      # Anchor 1
-    [0.0, 107., 1.0],      # Anchor 2
-    [220.0, 119.0, 1.0],      # Anchor 3
-    [220.0, -12.0, 1.0]       # Anchor 4
+    [1.180, 1.0, 0.2],      # Anchor 1
+    [1.180, 3.085, 0.2],      # Anchor 2
+    [3.20, 3.085, 0.2],      # Anchor 3
+    [3.20, 1.0, 0.2]       # Anchor 4
 ]
 
 # Fixed tag height in meters
