@@ -1,366 +1,229 @@
 #!/usr/bin/env python3
+# This script subscribes to UWB distance measurements from multiple anchors,
+# performs trilateration using simple trigonometry with pairs of adjacent anchors,
+# calculates multiple position estimates, averages them, and publishes the result.
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32MultiArray, String
+from std_msgs.msg import Float32MultiArray
 from geometry_msgs.msg import PointStamped
 import numpy as np
 import math
-import json
 
-class UWBPositionCalculator(Node):
+# Anchor coordinates [x, y, z] in meters
+ANCHORS = [
+    [1.18, 1.0, 0.2],      # Anchor 1
+    [1.18, 3.085, 0.2],      # Anchor 2
+    [3.2, 3.085, 0.2],      # Anchor 3
+    [3.2, 1.0, 0.2]       # Anchor 4
+]
+
+# Fixed tag height in meters
+TAG_HEIGHT = 0.41
+
+class UWBTrilaterationNode(Node):
     def __init__(self):
-        super().__init__('uwb_position_calculator')
+        super().__init__('uwb_trilateration_node')
+        self.anchors = np.array(ANCHORS)
+        self.tag_z = TAG_HEIGHT
+        self.num_anchors = len(ANCHORS)
 
-        # Get anchor heights and tag height from user
-        self.get_setup_parameters()
+        # Publisher for individual pairwise calculations
+        self.pairwise_pub = self.create_publisher(PointStamped, '/uwb_pairwise_position', 10)
 
-        # Subscribe to UWB distances
-        self.subscription = self.create_subscription(
+        # Publisher for final averaged position
+        self.position_pub = self.create_publisher(PointStamped, '/uwb_tag_position', 10)
+
+        # Subscriber for anchor distances
+        self.distance_sub = self.create_subscription(
             Float32MultiArray,
             '/uwb_distances',
             self.distance_callback,
             10
         )
 
-        # Publisher for calculated coordinates
-        self.coordinates_publisher = self.create_publisher(
-            PointStamped,
-            '/uwb_coordinates',
-            10
-        )
+        self.get_logger().info('UWB Trilateration Node initialized with pairwise trigonometry.')
+        self.get_logger().info(f'Anchor positions: {self.anchors.tolist()}')
+        self.get_logger().info(f'Tag fixed height: {self.tag_z} m')
 
-        # Publisher for anchor coordinates and heights
-        self.anchor_info_publisher = self.create_publisher(
-            String,
-            '/anchor_coordinates_heights',
-            10
-        )
-
-        # Publish anchor info once at startup
-        self.publish_anchor_info()
-
-        # Anchor positions (d1, d2, d3, d4) in centimeters
-        self.anchor_positions = {
-            0: np.array([0.0, 0.0]),         # d1 at (0,0)
-            1: np.array([0.0,107.0]),     # d2 at (10000,0)
-            2: np.array([220.0, 119.0]),  # d3 at (10000,6000)
-            3: np.array([220.0, 12.0])       # d4 at (0,6000)
-        }
-
-        # Define specific anchor pairs for calculation (only adjacent pairs)
-        self.anchor_pairs = [
-            (0, 1),  # d1, d2
-            (1, 2),  # d2, d3
-            (2, 3),  # d3, d4
-            (3, 0)   # d4, d1
-        ]
-
-        self.get_logger().info('UWB Position Calculator initialized for RTLS system')
-        self.get_logger().info('System will process UWB distances (in cm) at 5Hz and publish coordinates')
-        self.get_logger().info(f'Anchor positions: {self.anchor_positions}')
-        self.get_logger().info(f'Anchor heights: {self.anchor_heights}')
-        self.get_logger().info(f'Tag height: {self.tag_height}cm')
-        self.get_logger().info(f'Anchor pairs for calculation: {self.anchor_pairs}')
-        self.get_logger().info('Publishing to /uwb_coordinates and /anchor_coordinates_heights')
-
-    def get_setup_parameters(self):
-        """Get anchor heights and tag height from user input in centimeters"""
-        print("\n=== UWB Position Calculator Setup ===")
-
-        # Get anchor heights
-        print("Please enter the heights of the four anchors in centimeters:")
-        self.anchor_heights = {}
-        anchor_names = ['d1 (0,0)', 'd2 (10000,0)', 'd3 (10000,6000)', 'd4 (0,6000)']
-
-        for i, name in enumerate(anchor_names):
-            while True:
-                try:
-                    height = float(input(f"Enter height for anchor {name}: "))
-                    self.anchor_heights[i] = height
-                    break
-                except ValueError:
-                    print("Please enter a valid number")
-
-        # Get tag height
-        while True:
-            try:
-                self.tag_height = float(input("Enter tag height in centimeters: "))
-                break
-            except ValueError:
-                print("Please enter a valid number")
-
-        print(f"\nAnchor heights set: {self.anchor_heights}")
-        print(f"Tag height set: {self.tag_height}cm")
-        print("RTLS system ready - will process distances at 5Hz")
-        print("Starting UWB position calculation...\n")
-
-    def publish_anchor_info(self):
-        """Publish anchor coordinates and heights information"""
-        anchor_info = {
-            "anchor_coordinates": {
-                "d1": {"x": 0.0, "y": 0.0, "height": self.anchor_heights[0]},
-                "d2": {"x": 10000.0, "y": 0.0, "height": self.anchor_heights[1]},
-                "d3": {"x": 10000.0, "y": 6000.0, "height": self.anchor_heights[2]},
-                "d4": {"x": 0.0, "y": 6000.0, "height": self.anchor_heights[3]}
-            },
-            "tag_height": self.tag_height,
-            "field_dimensions": {"length": 10000.0, "width": 6000.0},
-            "coordinate_frame": "uwb_coordinate_frame"
-        }
-
-        # Convert to JSON string and publish
-        anchor_msg = String()
-        anchor_msg.data = json.dumps(anchor_info, indent=2)
-        self.anchor_info_publisher.publish(anchor_msg)
-
-        self.get_logger().info('Published anchor coordinates and heights to /anchor_coordinates_heights')
-
-    def distance_callback(self, msg):
-        """Process incoming UWB distance measurements (in cm) at 5Hz"""
-        start_time = self.get_clock().now()
-
-        distances = msg.data
-
-        if len(distances) < 2:
-            self.get_logger().warn('RTLS: Need at least 2 distance measurements for positioning')
-            return
-
-        # Convert 3D distances to 2D planar distances using Pythagorean theorem
-        planar_distances = {}
-
-        for i in range(min(4, len(distances))):  # Process up to 4 distances (d1, d2, d3, d4)
-            if distances[i] > 0:  # Valid distance measurement
-                height_diff = abs(self.anchor_heights[i] - self.tag_height)
-
-                # Calculate planar distance: sqrt(3D_distance² - height_diff²)
-                if distances[i] > height_diff:
-                    planar_distance = math.sqrt(distances[i]**2 - height_diff**2)
-                    planar_distances[i] = planar_distance
-                    self.get_logger().debug(f'RTLS: Anchor d{i+1}: 3D={distances[i]:.2f}cm, 2D={planar_distance:.2f}cm')
-                else:
-                    self.get_logger().debug(f'RTLS: Distance {distances[i]}cm from anchor d{i+1} is less than height difference {height_diff}cm')
-
-        if len(planar_distances) < 2:
-            self.get_logger().debug('RTLS: Need at least 2 valid planar distances')
-            return
-
-        # Calculate position using specific anchor pairs
-        positions = []
-        successful_pairs = []
-
-        for anchor1, anchor2 in self.anchor_pairs:
-            if anchor1 in planar_distances and anchor2 in planar_distances:
-                pos = self.calculate_position_coordinate_geometry(
-                    anchor1, anchor2,
-                    planar_distances[anchor1], planar_distances[anchor2]
-                )
-                if pos is not None:
-                    positions.append(pos)
-                    successful_pairs.append((anchor1, anchor2))
-                    pair_name = f"(d{anchor1+1},d{anchor2+1})"
-                    self.get_logger().debug(f'RTLS: Position from {pair_name}: ({pos[0]:.2f}, {pos[1]:.2f})')
-
-        if not positions:
-            self.get_logger().debug('RTLS: Could not calculate position from any anchor pair')
-            return
-
-        # Average all calculated positions
-        avg_position = np.mean(positions, axis=0)
-
-        # Create PointStamped message with timestamp and frame_id
-        point_msg = PointStamped()
-        point_msg.header.stamp = self.get_clock().now().to_msg()
-        point_msg.header.frame_id = "uwb_coordinate_frame"
-        point_msg.point.x = float(avg_position[0])
-        point_msg.point.y = float(avg_position[1])
-        point_msg.point.z = float(self.tag_height)  # Set z to tag height
-
-        self.coordinates_publisher.publish(point_msg)
-
-        # Calculate processing time
-        end_time = self.get_clock().now()
-        processing_time = (end_time - start_time).nanoseconds / 1e6  # Convert to milliseconds
-
-        # Log results (reduce frequency for cleaner output)
-        if len(successful_pairs) > 0:
-            timestamp = point_msg.header.stamp.sec + point_msg.header.stamp.nanosec * 1e-9
-            self.get_logger().info(f'RTLS [{timestamp:.3f}s]: Position ({point_msg.point.x:.2f}, {point_msg.point.y:.2f}) | '
-                                 f'Pairs: {len(positions)} | Processing: {processing_time:.1f}ms')
-
-    def calculate_position_coordinate_geometry(self, anchor1_id, anchor2_id, dist1, dist2):
+    def calculate_position_from_pair(self, anchor1, anchor2, d1, d2):
         """
-        Calculate tag position using basic coordinate geometry
-        Using the distance formula: (x-x1)² + (y-y1)² = d1²
+        Calculate 3D position using two anchors and their distances using trigonometry.
+        Returns list of possible (x, y, z) coordinates or None if calculation fails.
         """
-        # Get anchor positions
-        x1, y1 = self.anchor_positions[anchor1_id]
-        x2, y2 = self.anchor_positions[anchor2_id]
+        try:
+            # Calculate 2D projected distances (removing z-component)
+            dz1 = self.tag_z - anchor1[2]
+            dz2 = self.tag_z - anchor2[2]
 
-        self.get_logger().debug(f'RTLS: Calculating position for anchors d{anchor1_id+1}({x1},{y1}) and d{anchor2_id+1}({x2},{y2})')
-        self.get_logger().debug(f'RTLS: Distances: d{anchor1_id+1}={dist1:.2f}cm, d{anchor2_id+1}={dist2:.2f}cm')
+            # Check if distances are valid (tag must be reachable in 3D)
+            if d1**2 - dz1**2 < 0 or d2**2 - dz2**2 < 0:
+                self.get_logger().warn(f'Invalid 3D distance: d1={d1:.2f}, dz1={dz1:.2f}, d2={d2:.2f}, dz2={dz2:.2f}')
+                return None
 
-        # Distance equations:
-        # (x - x1)² + (y - y1)² = d1²  ... (1)
-        # (x - x2)² + (y - y2)² = d2²  ... (2)
+            r1 = math.sqrt(d1**2 - dz1**2)  # 2D distance from anchor1
+            r2 = math.sqrt(d2**2 - dz2**2)  # 2D distance from anchor2
 
-        # Expand both equations:
-        # x² - 2*x1*x + x1² + y² - 2*y1*y + y1² = d1²
-        # x² - 2*x2*x + x2² + y² - 2*y2*y + y2² = d2²
+            # Distance between anchors (2D)
+            dx = anchor2[0] - anchor1[0]
+            dy = anchor2[1] - anchor1[1]
+            d = math.sqrt(dx**2 + dy**2)
 
-        # Subtract equation (2) from equation (1):
-        # 2*x*(x2-x1) + 2*y*(y2-y1) = d1² - d2² + x2² - x1² + y2² - y1²
+            # Check if solution is geometrically possible
+            if d > r1 + r2:
+                self.get_logger().warn(f'Circles don\'t intersect: d={d:.2f}, r1+r2={r1+r2:.2f}')
+                return None
+            if d < abs(r1 - r2):
+                self.get_logger().warn(f'One circle inside another: d={d:.2f}, |r1-r2|={abs(r1-r2):.2f}')
+                return None
 
-        A = 2 * (x2 - x1)
-        B = 2 * (y2 - y1)
-        C = dist1**2 - dist2**2 + x2**2 - x1**2 + y2**2 - y1**2
+            # Use law of cosines to find angle
+            cos_angle = (r1**2 + d**2 - r2**2) / (2 * r1 * d)
 
-        # Linear equation: A*x + B*y = C
+            # Clamp to valid range for acos
+            cos_angle = max(-1, min(1, cos_angle))
+            angle = math.acos(cos_angle)
 
-        # Check if anchors are at the same position
-        if abs(A) < 1e-10 and abs(B) < 1e-10:
-            self.get_logger().debug(f'RTLS: Anchors d{anchor1_id+1} and d{anchor2_id+1} are at the same position')
+            # Calculate angle of line between anchors
+            base_angle = math.atan2(dy, dx)
+
+            # Two possible positions
+            angle1 = base_angle + angle
+            angle2 = base_angle - angle
+
+            # Calculate both positions
+            x1 = anchor1[0] + r1 * math.cos(angle1)
+            y1 = anchor1[1] + r1 * math.sin(angle1)
+
+            x2 = anchor1[0] + r1 * math.cos(angle2)
+            y2 = anchor1[1] + r1 * math.sin(angle2)
+
+            # Return both solutions
+            return [(x1, y1, self.tag_z), (x2, y2, self.tag_z)]
+
+        except Exception as e:
+            self.get_logger().warn(f'Error in pairwise calculation: {str(e)}')
             return None
 
-        # Special case: A ≈ 0 (anchors have same x-coordinate)
-        if abs(A) < 1e-10:
-            y = C / B
-            # Substitute back into first circle equation to get x
-            discriminant = dist1**2 - (y - y1)**2
-            if discriminant < 0:
-                self.get_logger().debug(f'RTLS: No real solution for anchors d{anchor1_id+1} and d{anchor2_id+1}')
-                return None
+    def select_best_position(self, positions_list, all_anchors, all_distances):
+        """
+        Select the best position from multiple candidates using least squares error.
+        """
+        if not positions_list:
+            return None
 
-            x1_sol = x1 + math.sqrt(discriminant)
-            x2_sol = x1 - math.sqrt(discriminant)
+        best_position = None
+        best_error = float('inf')
 
-            # Choose solution within field bounds
-            if 0 <= x1_sol <= 10000:
-                x = x1_sol
-            elif 0 <= x2_sol <= 10000:
-                x = x2_sol
+        for pos in positions_list:
+            # Calculate error for this position
+            total_error = 0
+            for i, anchor in enumerate(all_anchors):
+                predicted_dist = math.sqrt(
+                    (pos[0] - anchor[0])**2 +
+                    (pos[1] - anchor[1])**2 +
+                    (pos[2] - anchor[2])**2
+                )
+                error = abs(predicted_dist - all_distances[i])
+                total_error += error**2
+
+            if total_error < best_error:
+                best_error = total_error
+                best_position = pos
+
+        return best_position
+
+    def distance_callback(self, msg):
+        distances = np.array(msg.data)
+
+        if len(distances) != self.num_anchors:
+            self.get_logger().warn(f'Expected {self.num_anchors} distances, got {len(distances)}')
+            return
+
+        # Filter valid distances
+        if not all(d > 0 for d in distances):
+            self.get_logger().warn('Some distances are invalid (<=0)')
+            return
+
+        # Calculate positions using pairs of adjacent anchors
+        all_candidate_positions = []
+        pairwise_positions = []
+        valid_calculations = 0
+
+        # Define pairs: (1,2), (2,3), (3,4), (4,1)
+        pairs = [(0, 1), (1, 2), (2, 3), (3, 0)]
+
+        for i, (idx1, idx2) in enumerate(pairs):
+            anchor1 = self.anchors[idx1]
+            anchor2 = self.anchors[idx2]
+            d1 = distances[idx1]
+            d2 = distances[idx2]
+
+            positions = self.calculate_position_from_pair(anchor1, anchor2, d1, d2)
+
+            if positions is not None:
+                # Select best position from the two candidates
+                best_pos = self.select_best_position(positions, self.anchors, distances)
+
+                if best_pos is not None:
+                    pairwise_positions.append(best_pos)
+                    all_candidate_positions.extend(positions)
+                    valid_calculations += 1
+
+                    # Publish individual pairwise calculation
+                    pairwise_msg = PointStamped()
+                    pairwise_msg.header.stamp = self.get_clock().now().to_msg()
+                    pairwise_msg.header.frame_id = 'map'
+                    pairwise_msg.point.x = float(best_pos[0])
+                    pairwise_msg.point.y = float(best_pos[1])
+                    pairwise_msg.point.z = float(best_pos[2])
+                    self.pairwise_pub.publish(pairwise_msg)
+
+                    self.get_logger().info(f'Pair {idx1+1}-{idx2+1}: ({best_pos[0]:.2f}, {best_pos[1]:.2f}, {best_pos[2]:.2f})')
+                else:
+                    self.get_logger().warn(f'Failed to select best position for pair {idx1+1}-{idx2+1}')
             else:
-                # Take the one closer to field bounds
-                x = x1_sol if abs(x1_sol - 5000) < abs(x2_sol - 5000) else x2_sol
+                self.get_logger().warn(f'Failed to calculate position for pair {idx1+1}-{idx2+1}')
 
-        # Special case: B ≈ 0 (anchors have same y-coordinate)
-        elif abs(B) < 1e-10:
-            x = C / A
-            # Substitute back into first circle equation to get y
-            discriminant = dist1**2 - (x - x1)**2
-            if discriminant < 0:
-                self.get_logger().debug(f'RTLS: No real solution for anchors d{anchor1_id+1} and d{anchor2_id+1}')
-                return None
+        # Calculate final position
+        if valid_calculations > 0:
+            # Method 1: Simple average
+            avg_x = sum(pos[0] for pos in pairwise_positions) / len(pairwise_positions)
+            avg_y = sum(pos[1] for pos in pairwise_positions) / len(pairwise_positions)
+            avg_z = self.tag_z  # Z is fixed
 
-            y1_sol = y1 + math.sqrt(discriminant)
-            y2_sol = y1 - math.sqrt(discriminant)
+            # Method 2: Select best from all candidates (alternative approach)
+            best_overall = self.select_best_position(all_candidate_positions, self.anchors, distances)
 
-            # Choose solution within field bounds
-            if 0 <= y1_sol <= 6000:
-                y = y1_sol
-            elif 0 <= y2_sol <= 6000:
-                y = y2_sol
-            else:
-                # Take the one closer to field bounds
-                y = y1_sol if abs(y1_sol - 3000) < abs(y2_sol - 3000) else y2_sol
+            # Use the simple average for final result
+            final_x, final_y, final_z = avg_x, avg_y, avg_z
 
-        # General case: both A and B are non-zero
+            # Publish averaged position
+            final_msg = PointStamped()
+            final_msg.header.stamp = self.get_clock().now().to_msg()
+            final_msg.header.frame_id = 'map'
+            final_msg.point.x = float(final_x)
+            final_msg.point.y = float(final_y)
+            final_msg.point.z = float(final_z)
+            self.position_pub.publish(final_msg)
+
+            self.get_logger().info(f'AVERAGED position ({valid_calculations} calculations): ({final_x:.2f}, {final_y:.2f}, {final_z:.2f})')
+
+            if best_overall:
+                self.get_logger().info(f'Best overall candidate: ({best_overall[0]:.2f}, {best_overall[1]:.2f}, {best_overall[2]:.2f})')
         else:
-            # Express x in terms of y: x = (C - B*y) / A
-            # Substitute into first circle equation:
-            # ((C - B*y) / A - x1)² + (y - y1)² = d1²
-
-            # Let D = C - A*x1, so x = (D - B*y) / A
-            D = C - A * x1
-
-            # Substitute: ((D - B*y) / A)² + (y - y1)² = d1²
-            # (D - B*y)² / A² + (y - y1)² = d1²
-            # (D - B*y)² + A²*(y - y1)² = A²*d1²
-
-            # Expand: D² - 2*D*B*y + B²*y² + A²*y² - 2*A²*y1*y + A²*y1² = A²*d1²
-            # (B² + A²)*y² - (2*D*B + 2*A²*y1)*y + (D² + A²*y1² - A²*d1²) = 0
-
-            a_coeff = B**2 + A**2
-            b_coeff = -(2*D*B + 2*A**2*y1)
-            c_coeff = D**2 + A**2*y1**2 - A**2*dist1**2
-
-            # Solve quadratic equation
-            discriminant = b_coeff**2 - 4*a_coeff*c_coeff
-
-            if discriminant < 0:
-                self.get_logger().debug(f'RTLS: No real solution for anchors d{anchor1_id+1} and d{anchor2_id+1}')
-                return None
-
-            # Two possible y values
-            y1_sol = (-b_coeff + math.sqrt(discriminant)) / (2*a_coeff)
-            y2_sol = (-b_coeff - math.sqrt(discriminant)) / (2*a_coeff)
-
-            # Calculate corresponding x values
-            x1_sol = (C - B*y1_sol) / A
-            x2_sol = (C - B*y2_sol) / A
-
-            # Choose the solution that's within reasonable bounds
-            sol1_valid = 0 <= x1_sol <= 10000 and 0 <= y1_sol <= 6000
-            sol2_valid = 0 <= x2_sol <= 10000 and 0 <= y2_sol <= 6000
-
-            if sol1_valid and sol2_valid:
-                # Both solutions valid, choose the one closer to field center
-                center_x, center_y = 5000, 3000
-                dist1_to_center = math.sqrt((x1_sol - center_x)**2 + (y1_sol - center_y)**2)
-                dist2_to_center = math.sqrt((x2_sol - center_x)**2 + (y2_sol - center_y)**2)
-
-                if dist1_to_center <= dist2_to_center:
-                    x, y = x1_sol, y1_sol
-                else:
-                    x, y = x2_sol, y2_sol
-            elif sol1_valid:
-                x, y = x1_sol, y1_sol
-            elif sol2_valid:
-                x, y = x2_sol, y2_sol
-            else:
-                # Neither solution is perfectly in bounds, choose the better one
-                self.get_logger().debug(f'RTLS: Solutions out of bounds for anchors d{anchor1_id+1} and d{anchor2_id+1}')
-                # Choose the one that's closer to being in bounds
-                score1 = self.calculate_bound_score(x1_sol, y1_sol)
-                score2 = self.calculate_bound_score(x2_sol, y2_sol)
-
-                if score1 <= score2:
-                    x, y = x1_sol, y1_sol
-                else:
-                    x, y = x2_sol, y2_sol
-
-        return np.array([x, y])
-
-    def calculate_bound_score(self, x, y):
-        """Calculate how far a point is from being within bounds (lower is better)"""
-        x_penalty = max(0, -x) + max(0, x - 10000)  # Penalty for being outside [0, 10000]
-        y_penalty = max(0, -y) + max(0, y - 6000)   # Penalty for being outside [0, 6000]
-        return x_penalty + y_penalty
+            self.get_logger().error('No valid position calculations from any pair')
 
 def main(args=None):
     rclpy.init(args=args)
-
+    node = UWBTrilaterationNode()
     try:
-        uwb_calculator = UWBPositionCalculator()
-
-        # Log system startup
-        uwb_calculator.get_logger().info('=== RTLS SYSTEM STARTED ===')
-        uwb_calculator.get_logger().info('Ready to process UWB distances (in cm) at 5Hz')
-        uwb_calculator.get_logger().info('Publishing coordinates to /uwb_coordinates')
-        uwb_calculator.get_logger().info('Publishing anchor info to /anchor_coordinates_heights')
-        uwb_calculator.get_logger().info('=============================')
-
-        rclpy.spin(uwb_calculator)
-
+        rclpy.spin(node)
     except KeyboardInterrupt:
-        uwb_calculator.get_logger().info('RTLS system shutdown requested')
-    except Exception as e:
-        uwb_calculator.get_logger().error(f'RTLS system error: {e}')
+        pass
     finally:
-        if 'uwb_calculator' in locals():
-            uwb_calculator.destroy_node()
+        node.destroy_node()
         rclpy.shutdown()
-        print('RTLS system stopped')
 
 if __name__ == '__main__':
     main()

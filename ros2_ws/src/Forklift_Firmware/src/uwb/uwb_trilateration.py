@@ -12,14 +12,14 @@ import math
 
 # Anchor coordinates [x, y, z] in meters
 ANCHORS = [
-    [1.180, 1.0, 0.2],      # Anchor 1
-    [1.180, 3.085, 0.2],      # Anchor 2
-    [3.20, 3.085, 0.2],      # Anchor 3
-    [3.20, 1.0, 0.2]       # Anchor 4
+    [0.0, 0.0, 0.2],      # Anchor 1
+    [0.0, 2.085, 0.2],      # Anchor 2
+    [2.2, 2.085, 0.2],      # Anchor 3
+    [2.20, 0.0, 0.2]       # Anchor 4
 ]
 
 # Fixed tag height in meters
-TAG_HEIGHT = 0.14
+TAG_HEIGHT = 0.41
 
 class UWBTrilaterationNode(Node):
     def __init__(self):
